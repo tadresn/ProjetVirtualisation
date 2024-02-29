@@ -1,0 +1,144 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myservice-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: myservice-backend
+  template:
+    metadata:
+      labels:
+        app: myservice-backend
+    spec:
+      containers:
+        - image: tadresn/quiz-prod-api:latest
+          imagePullPolicy: IfNotPresent
+          name: myservice-backend
+          ports: 
+            - containerPort: 5000
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: myservice-backend
+spec:
+  selector:
+    app: myservice-backend
+  ports:
+    - protocol: TCP
+      port: 5000
+      targetPort: 5000  
+  type: NodePort 
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myservice-backend2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: myservice-backend2
+  template:
+    metadata:
+      labels:
+        app: myservice-backend2
+    spec:
+      containers:
+        - image: tadresn/myservice-backend2:latest
+          imagePullPolicy: IfNotPresent
+          name: myservice-backend2
+          ports: 
+          - containerPort: 5000
+          env:
+          - name: URL_TO_CHECK
+            value: "http://myservice-backend:5000"
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: myservice-backend2
+spec:
+  selector:
+    app: myservice-backend2
+  ports:
+    - protocol: TCP
+      port: 5001
+      targetPort: 5000  
+  type: LoadBalancer
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myservice-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: myservice-frontend
+  template:
+    metadata:
+      labels:
+        app: myservice-frontend
+    spec:
+      containers:
+        - image: tadresn/quiz-ui:latest
+          imagePullPolicy: IfNotPresent
+          name: myservice-frontend
+          ports: 
+            - containerPort: 3000
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: myservice-frontend
+spec:
+  selector:
+    app: myservice-frontend
+  ports:
+    - protocol: TCP
+      port: 3000
+      targetPort: 80
+  type: NodePort   
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: microservice-gateway
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 8080
+      name: http
+      protocol: HTTP
+    hosts:
+    - "*"
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: myservice
+spec:
+  hosts:
+  - "*"
+  gateways:
+  - microservice-gateway
+  http:
+  - match:
+    - uri:
+        prefix: /
+    route:
+    - destination:
+        host: myservice-backend.default.svc.cluster.local
+        port:
+          number: 5000
+
+
